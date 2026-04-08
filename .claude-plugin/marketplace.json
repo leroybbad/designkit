@@ -1,15 +1,18 @@
 {
-  "name": "designkit",
+  "name": "design-companion",
   "description": "Browser-based design refinement tools for Claude Code",
   "owner": {
     "name": "Lee McEwen"
   },
   "plugins": [
     {
-      "name": "designkit",
+      "name": "design-companion",
       "description": "Comment, Inspect, Tune, and Shadow tools for hands-on UI design iteration with Claude",
       "version": "0.1.0",
-      "source": "./",
+      "source": {
+        "source": "github",
+        "repo": "leroybbad/designkit"
+      },
       "author": {
         "name": "Lee McEwen"
       }

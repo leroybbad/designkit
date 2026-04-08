@@ -1,4 +1,4 @@
-# Designkit Visual Guide
+# Design Companion Visual Guide
 
 Detailed reference for the browser-based design companion tools.
 

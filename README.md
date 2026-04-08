@@ -1,4 +1,4 @@
-# Designkit
+# Design Companion
 
 A browser-based design refinement plugin for Claude Code. Gives designers hands-on tools to annotate, inspect, and tune prototypes — bridging the gap between "Claude rendered something" and "this is actually good."
 
@@ -18,8 +18,8 @@ When you're done tweaking, hit **Send** (Shift+Cmd+Enter). Claude reads your str
 In Claude Code, run these two commands:
 
 ```
-/plugin marketplace add leroybbad/designkit
-/plugin install designkit@leroybbad-designkit
+/plugin marketplace add leroybbad/design-superpowers
+/plugin install design-companion@leroybbad-design-superpowers
 ```
 
 Then reload plugins without restarting:
@@ -29,6 +29,7 @@ Then reload plugins without restarting:
 ```
 
 That's it. The skill, server, and all tools ship with the plugin — nothing to build.
+```
 
 ## How It Works
 
@@ -60,6 +61,8 @@ That's it. The skill, server, and all tools ship with the plugin — nothing to 
 
 AI-generated design is 80% right and 100% slop. The last 20% — the spacing, the weight, the shadow depth, the animation timing — is what separates craft from generic output. This tool keeps the designer's hands on the wheel during that critical refinement phase.
 
+Read more in [docs/VISION.md](docs/VISION.md).
+
 ## License
 
-MIT — derived in part from [Superpowers](https://github.com/obra/superpowers) by Jesse Vincent.
+MIT

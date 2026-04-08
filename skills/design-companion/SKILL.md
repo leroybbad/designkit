@@ -1,9 +1,9 @@
 ---
-name: designkit
+name: design-companion
 description: "Use when designing or refining UI — launches a browser-based companion with Comment, Inspect, and Tune tools for hands-on design iteration with Claude."
 ---
 
-# Designkit
+# Design Companion
 
 A browser-based design refinement tool. Launches a local server that renders prototypes and gives designers hands-on tools to annotate, inspect, and tune visual properties — then sends structured feedback to Claude for the next iteration.
 
@@ -16,7 +16,7 @@ A browser-based design refinement tool. Launches a local server that renders pro
 
 ## Checklist
 
-1. **Start the Designkit server**
+1. **Start the Design Companion server**
 2. **Generate the prototype** following authoring standards
 3. **Tell the user the URL** and what tools are available
 4. **Wait for the user** to comment, inspect, or tune — then tell you to process
@@ -27,7 +27,7 @@ A browser-based design refinement tool. Launches a local server that renders pro
 ## Starting the Server
 
 ```bash
-skills/designkit/scripts/start-server.sh --project-dir /path/to/project
+skills/design-companion/scripts/start-server.sh --project-dir /path/to/project
 ```
 
 Returns JSON with `screen_dir`, `state_dir`, and `url`. Save all three.
@@ -178,7 +178,7 @@ The file contains JSONL — one JSON object per line. Two types:
 ## Stopping the Server
 
 ```bash
-skills/designkit/scripts/stop-server.sh $SESSION_DIR
+skills/design-companion/scripts/stop-server.sh $SESSION_DIR
 ```
 
 Mockup files persist in `.superpowers/brainstorm/` under the project directory for later reference.

@@ -1,5 +1,5 @@
 {
-  "name": "designkit",
+  "name": "design-companion",
   "description": "Browser-based design refinement tools for Claude Code — Comment, Inspect, Tune, and Shadow modes for hands-on UI iteration",
   "version": "0.1.0",
   "author": {
