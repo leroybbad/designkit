@@ -18,6 +18,17 @@
   let tuneStyleObserver = null;
   let undoStack = []; // {element, prop, oldValue}
   let redoStack = [];
+  let themeMode = false;
+  let themePanel = null;
+  const THEME_KEY = 'theme-state-' + window.location.port;
+  let themeState = loadThemeState();
+
+  function loadThemeState() {
+    try { return JSON.parse(localStorage.getItem(THEME_KEY) || '{}'); } catch (e) { return {}; }
+  }
+  function saveThemeState() {
+    localStorage.setItem(THEME_KEY, JSON.stringify(themeState));
+  }
 
   function loadAnnotations() {
     try {
@@ -160,15 +171,23 @@
       if (inspectMode) setInspectMode(false);
       setTuneMode(!tuneMode);
     }
+    if (e.shiftKey && e.key === 'D') {
+      e.preventDefault();
+      if (commentMode) setCommentMode(false);
+      if (inspectMode) setInspectMode(false);
+      if (tuneMode) setTuneMode(false);
+      setThemeMode(!themeMode);
+    }
     if (e.key === 'Escape') {
       if (sidebarOpen) {
         e.preventDefault();
         toggleSidebar(false);
-      } else if (commentMode || inspectMode || tuneMode) {
+      } else if (commentMode || inspectMode || tuneMode || themeMode) {
         e.preventDefault();
         setCommentMode(false);
         setInspectMode(false);
         setTuneMode(false);
+        setThemeMode(false);
       }
     }
     if (e.shiftKey && e.key === 'A' && !e.metaKey && !e.ctrlKey) {
@@ -519,6 +538,31 @@
         timestamp: Date.now()
       });
     });
+
+    // Add consolidated theme state if any theme changes were made
+    if (themeState && themeState.system) {
+      const data = window.THEME_DATA;
+      const palette = data ? data.palettes.find(p => p.key === themeState.system) : null;
+      if (palette) {
+        const allTokens = {};
+        const cc = document.getElementById('claude-content');
+        if (cc) {
+          Object.keys(palette.tokens).forEach(key => {
+            const val = cc.style.getPropertyValue(key);
+            if (val) allTokens[key] = val.trim();
+          });
+        }
+        payload.push({
+          type: 'theme',
+          system: themeState.system,
+          colorVariant: themeState.colorVariant || 'default',
+          accentColor: themeState.accentColor || null,
+          fineTune: themeState.fineTune || {},
+          tokenChanges: allTokens,
+          timestamp: Date.now()
+        });
+      }
+    }
 
     sendEvent({ type: 'annotations', items: payload });
 
@@ -1339,6 +1383,722 @@
     openTunePanel(target);
   }, true);
 
+  // ===== COLOR UTILITIES (for Theme panel) =====
+  function hexToRgb(hex) {
+    hex = hex.replace('#', '');
+    if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+    return [parseInt(hex.slice(0,2), 16), parseInt(hex.slice(2,4), 16), parseInt(hex.slice(4,6), 16)];
+  }
+  function numToHex(r, g, b) {
+    return '#' + [r,g,b].map(c => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, '0')).join('');
+  }
+  function themeRelativeLuminance(hex) {
+    const [r, g, b] = hexToRgb(hex).map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+  function lightenColor(hex, percent) {
+    const [r, g, b] = hexToRgb(hex);
+    const amt = Math.round(2.55 * percent);
+    return numToHex(r + amt, g + amt, b + amt);
+  }
+
+  // ===== THEME MODE =====
+  function setThemeMode(active) {
+    themeMode = active;
+    const btn = document.getElementById('theme-toggle');
+    if (btn) btn.classList.toggle('active', themeMode);
+    if (themeMode) {
+      const existingTune = document.querySelector('.tune-panel');
+      if (existingTune) existingTune.remove();
+      openThemePanel();
+    } else {
+      closeThemePanel();
+    }
+  }
+  function openThemePanel() {
+    if (themePanel) return;
+    themePanel = createThemePanel();
+    document.body.appendChild(themePanel);
+  }
+  function closeThemePanel() {
+    if (themePanel) { themePanel.remove(); themePanel = null; }
+  }
+
+  function createThemePanel() {
+    const panel = document.createElement('div');
+    panel.className = 'tune-panel theme-panel';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'tune-header';
+    header.innerHTML = '<span class="tune-tag">Theme Selector</span>';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'tune-close';
+    closeBtn.textContent = '\u00d7';
+    closeBtn.addEventListener('click', () => { setThemeMode(false); });
+    header.appendChild(closeBtn);
+    panel.appendChild(header);
+
+    // Tab bar
+    const tabBar = document.createElement('div');
+    tabBar.className = 'tune-tabs';
+    const tabNames = ['System', 'Colors', 'Fine-tune'];
+    const tabPanels = {};
+
+    tabNames.forEach((name, i) => {
+      const tab = document.createElement('button');
+      tab.className = 'tune-tab' + (i === 0 ? ' active' : '');
+      tab.textContent = name;
+      tab.addEventListener('click', () => {
+        tabBar.querySelectorAll('.tune-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        Object.values(tabPanels).forEach(p => p.style.display = 'none');
+        tabPanels[name].style.display = '';
+        if (name === 'Colors') rebuildColorsTab(panel);
+        if (name === 'Fine-tune') rebuildFineTuneTab(panel);
+      });
+      tabBar.appendChild(tab);
+    });
+    panel.appendChild(tabBar);
+
+    // System tab
+    const systemTab = buildSystemTab(panel);
+    systemTab.style.display = '';
+    tabPanels['System'] = systemTab;
+    panel.appendChild(systemTab);
+
+    // Colors tab (placeholder)
+    const colorsTab = document.createElement('div');
+    colorsTab.className = 'tune-controls';
+    colorsTab.style.display = 'none';
+    colorsTab.innerHTML = '<div style="padding:16px;color:var(--dc-text-secondary,#888);font-size:13px;">Save a design system first to unlock color overrides.</div>';
+    tabPanels['Colors'] = colorsTab;
+    panel.appendChild(colorsTab);
+
+    // Fine-tune tab (placeholder)
+    const fineTuneTab = document.createElement('div');
+    fineTuneTab.className = 'tune-controls';
+    fineTuneTab.style.display = 'none';
+    fineTuneTab.innerHTML = '<div style="padding:16px;color:var(--dc-text-secondary,#888);font-size:13px;">Save a design system first to unlock fine-tuning.</div>';
+    tabPanels['Fine-tune'] = fineTuneTab;
+    panel.appendChild(fineTuneTab);
+
+    panel._tabPanels = tabPanels;
+    return panel;
+  }
+
+  function buildSystemTab(panel) {
+    const container = document.createElement('div');
+    container.className = 'tune-controls';
+
+    const td = window.THEME_DATA;
+    if (!td || !td.palettes) {
+      container.innerHTML = '<div style="padding:16px;color:#888;font-size:13px;">No theme data available.</div>';
+      return container;
+    }
+
+    let previewKey = themeState.system || null;
+
+    // Palette list
+    const list = document.createElement('div');
+    list.className = 'theme-palette-list';
+    list.style.cssText = 'overflow-y:auto;flex:1;padding:8px 0;';
+
+    function applyPaletteTokens(palette) {
+      const cc = document.getElementById('claude-content');
+      if (!cc) return;
+      if (palette && palette.tokens) {
+        Object.entries(palette.tokens).forEach(([key, value]) => {
+          cc.style.setProperty(key, value);
+        });
+      }
+    }
+
+    function clearPaletteTokens(palette) {
+      const cc = document.getElementById('claude-content');
+      if (!cc || !palette || !palette.tokens) return;
+      Object.keys(palette.tokens).forEach(key => {
+        cc.style.removeProperty(key);
+      });
+    }
+
+    td.palettes.forEach(palette => {
+      const row = document.createElement('div');
+      row.className = 'theme-palette-row';
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-radius:6px;transition:background 0.1s;';
+      if (previewKey === palette.key) row.style.background = 'rgba(0,0,0,0.06)';
+
+      // 5 color dots from palette tokens
+      const dots = document.createElement('div');
+      dots.style.cssText = 'display:flex;gap:4px;flex-shrink:0;';
+      const colorProps = ['--color-primary','--color-secondary','--color-background','--color-surface','--color-text'];
+      colorProps.forEach(prop => {
+        const dot = document.createElement('div');
+        dot.style.cssText = 'width:14px;height:14px;border-radius:50%;border:1px solid rgba(0,0,0,0.12);flex-shrink:0;';
+        const val = palette.tokens && palette.tokens[prop];
+        dot.style.background = val || '#ccc';
+        dots.appendChild(dot);
+      });
+
+      // Name + tier
+      const nameWrap = document.createElement('div');
+      nameWrap.style.cssText = 'flex:1;min-width:0;';
+      const nameEl = document.createElement('div');
+      nameEl.style.cssText = 'font-size:13px;font-weight:500;color:var(--dc-text,#111);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      nameEl.textContent = palette.name;
+      const tierEl = document.createElement('div');
+      tierEl.style.cssText = 'font-size:11px;color:var(--dc-text-secondary,#888);margin-top:1px;';
+      tierEl.textContent = 'Tier ' + palette.tier;
+      nameWrap.appendChild(nameEl);
+      nameWrap.appendChild(tierEl);
+
+      // Active indicator
+      const check = document.createElement('div');
+      check.style.cssText = 'width:16px;height:16px;flex-shrink:0;';
+      if (themeState.system === palette.key) {
+        check.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="#0066ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      }
+
+      row.appendChild(dots);
+      row.appendChild(nameWrap);
+      row.appendChild(check);
+
+      row.addEventListener('mouseenter', () => { row.style.background = 'rgba(0,0,0,0.05)'; });
+      row.addEventListener('mouseleave', () => {
+        row.style.background = previewKey === palette.key ? 'rgba(0,0,0,0.06)' : '';
+      });
+
+      row.addEventListener('click', () => {
+        // Clear previous preview
+        if (previewKey && previewKey !== palette.key) {
+          const prev = td.palettes.find(p => p.key === previewKey);
+          if (prev) clearPaletteTokens(prev);
+        }
+        previewKey = palette.key;
+        applyPaletteTokens(palette);
+        // Update row highlights
+        list.querySelectorAll('.theme-palette-row').forEach(r => {
+          r.style.background = '';
+        });
+        row.style.background = 'rgba(0,0,0,0.06)';
+        saveBtn.disabled = false;
+        saveBtn.style.opacity = '1';
+      });
+
+      list.appendChild(row);
+    });
+
+    container.appendChild(list);
+
+    // Apply bar
+    const applyBar = document.createElement('div');
+    applyBar.className = 'tune-apply-bar';
+    applyBar.style.cssText = 'display:flex;gap:8px;align-items:center;justify-content:flex-end;';
+
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'tune-reset';
+    resetBtn.textContent = 'Reset';
+    resetBtn.addEventListener('click', () => {
+      // Remove all applied tokens from all palettes
+      td.palettes.forEach(p => clearPaletteTokens(p));
+      themeState.system = null;
+      saveThemeState();
+      previewKey = null;
+      list.querySelectorAll('.theme-palette-row').forEach(r => { r.style.background = ''; });
+      list.querySelectorAll('.theme-palette-row > div:last-child').forEach(c => { c.innerHTML = ''; });
+      saveBtn.disabled = true;
+      saveBtn.style.opacity = '0.5';
+      showToast('Design system reset.');
+    });
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'tune-apply';
+    saveBtn.textContent = 'Save System';
+    const hasExisting = !!themeState.system;
+    saveBtn.disabled = !hasExisting && !previewKey;
+    if (!hasExisting && !previewKey) saveBtn.style.opacity = '0.5';
+
+    saveBtn.addEventListener('click', () => {
+      if (!previewKey) return;
+      const palette = td.palettes.find(p => p.key === previewKey);
+      if (!palette) return;
+
+      const oldSystem = themeState.system;
+      themeState.system = previewKey;
+      saveThemeState();
+
+      // Push to undo stack
+      const cc = document.getElementById('claude-content');
+      if (cc && palette.tokens) {
+        Object.entries(palette.tokens).forEach(([key, value]) => {
+          const oldVal = cc.style.getPropertyValue(key) || '';
+          undoStack.push({ element: cc, prop: key, oldValue: oldVal, isToken: true });
+        });
+        redoStack = [];
+      }
+
+      // Add to tuneChanges for sidebar
+      const tokenChanges = {};
+      if (palette.tokens) Object.entries(palette.tokens).forEach(([k, v]) => { tokenChanges[k] = v; });
+      tuneChanges = tuneChanges.filter(c => c.selector !== '#claude-content' || !c._themeSystem);
+      tuneChanges.push({
+        selector: '#claude-content',
+        tag: 'div',
+        text: 'Design system: ' + palette.name,
+        changes: {},
+        tokenChanges: tokenChanges,
+        timestamp: Date.now(),
+        _themeSystem: true
+      });
+
+      // Update check marks
+      list.querySelectorAll('.theme-palette-row').forEach((r, i) => {
+        const p = td.palettes[i];
+        const check = r.querySelector('div:last-child');
+        if (check) {
+          check.innerHTML = p.key === previewKey
+            ? '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="#0066ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+            : '';
+        }
+      });
+
+      saveAnnotations();
+      renderSidebar();
+      showToast('Design system set to ' + palette.name + '.');
+    });
+
+    applyBar.appendChild(resetBtn);
+    applyBar.appendChild(saveBtn);
+    container.appendChild(applyBar);
+
+    return container;
+  }
+
+  function applyStoredTheme() {
+    const td = window.THEME_DATA;
+    if (!td || !td.palettes) return;
+    if (!themeState.system) return;
+    const palette = td.palettes.find(p => p.key === themeState.system);
+    if (!palette || !palette.tokens) return;
+    const cc = document.getElementById('claude-content');
+    if (!cc) return;
+    Object.entries(palette.tokens).forEach(([key, value]) => {
+      cc.style.setProperty(key, value);
+    });
+  }
+
+  function rebuildColorsTab(panel) {
+    const colorsPanel = panel._tabPanels['Colors'];
+    if (!colorsPanel) return;
+
+    const td = window.THEME_DATA;
+    if (!td || !td.palettes) return;
+    if (!themeState.system) {
+      colorsPanel.innerHTML = '<div style="padding:16px;color:var(--dc-text-secondary,#888);font-size:13px;">Save a design system first to unlock color overrides.</div>';
+      return;
+    }
+
+    const palette = td.palettes.find(p => p.key === themeState.system);
+    if (!palette) return;
+
+    const cc = document.getElementById('claude-content');
+
+    // Track working color variant and accent
+    let activeVariant = themeState.colorVariant || 'default';
+    let activeAccent = themeState.accentColor || palette.tokens['--color-primary'] || '#0066ff';
+
+    const VARIANT_NAMES = ['default', 'dark', 'warm', 'cool'];
+    const VARIANT_LABELS = { default: 'Default', dark: 'Dark', warm: 'Warm', cool: 'Cool' };
+    // Five color dots to show per variant
+    const DOT_TOKENS = ['--color-bg', '--color-surface', '--color-primary', '--color-text', '--color-border'];
+
+    function getVariantTokens(variantKey) {
+      const base = palette.tokens || {};
+      const overrides = (palette.variants && palette.variants[variantKey]) || {};
+      return Object.assign({}, base, overrides);
+    }
+
+    function applyVariant(variantKey) {
+      if (!cc) return;
+      const vTokens = getVariantTokens(variantKey);
+      // Only swap --color-* tokens
+      Object.entries(vTokens).forEach(([k, v]) => {
+        if (k.startsWith('--color-')) cc.style.setProperty(k, v);
+      });
+    }
+
+    function applyAccent(hex) {
+      if (!cc) return;
+      cc.style.setProperty('--color-primary', hex);
+      cc.style.setProperty('--color-primary-hover', lightenColor(hex, -15));
+      const lum = themeRelativeLuminance(hex);
+      cc.style.setProperty('--color-on-primary', lum > 0.35 ? '#000000' : '#FFFFFF');
+    }
+
+    // Build container
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'padding:12px 16px;';
+
+    // Section: Color Variant
+    const variantLabel = document.createElement('div');
+    variantLabel.className = 'theme-finetune-label';
+    variantLabel.textContent = 'COLOR MODE';
+    wrap.appendChild(variantLabel);
+
+    const variantsRow = document.createElement('div');
+    variantsRow.className = 'theme-variants';
+
+    VARIANT_NAMES.forEach(vKey => {
+      const vTokens = getVariantTokens(vKey);
+      const card = document.createElement('div');
+      card.className = 'theme-variant' + (activeVariant === vKey ? ' active' : '');
+      card.title = VARIANT_LABELS[vKey];
+
+      const dots = document.createElement('div');
+      dots.className = 'theme-dots';
+      DOT_TOKENS.forEach(tok => {
+        const dot = document.createElement('div');
+        dot.className = 'theme-dot';
+        dot.style.background = vTokens[tok] || '#888';
+        dots.appendChild(dot);
+      });
+
+      const lbl = document.createElement('div');
+      lbl.className = 'theme-variant-label';
+      lbl.textContent = VARIANT_LABELS[vKey];
+
+      card.appendChild(dots);
+      card.appendChild(lbl);
+
+      card.addEventListener('click', () => {
+        activeVariant = vKey;
+        variantsRow.querySelectorAll('.theme-variant').forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        applyVariant(vKey);
+      });
+
+      variantsRow.appendChild(card);
+    });
+    wrap.appendChild(variantsRow);
+
+    // Section: Accent Color
+    const accentRow = document.createElement('div');
+    accentRow.className = 'theme-accent-row';
+
+    const accentLabel = document.createElement('div');
+    accentLabel.className = 'theme-accent-label';
+    accentLabel.textContent = 'Accent color';
+
+    const accentInput = document.createElement('input');
+    accentInput.type = 'color';
+    accentInput.className = 'theme-accent-input';
+    accentInput.value = activeAccent.length === 7 ? activeAccent : '#0066ff';
+
+    const accentHex = document.createElement('div');
+    accentHex.className = 'theme-accent-hex';
+    accentHex.textContent = accentInput.value.toUpperCase();
+
+    accentInput.addEventListener('input', () => {
+      activeAccent = accentInput.value;
+      accentHex.textContent = activeAccent.toUpperCase();
+      applyAccent(activeAccent);
+    });
+
+    accentRow.appendChild(accentLabel);
+    accentRow.appendChild(accentInput);
+    accentRow.appendChild(accentHex);
+    wrap.appendChild(accentRow);
+
+    // Save bar
+    const saveBar = document.createElement('div');
+    saveBar.className = 'theme-save-bar';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'theme-save-btn';
+    saveBtn.textContent = 'Save Colors';
+
+    saveBtn.addEventListener('click', () => {
+      themeState.colorVariant = activeVariant;
+      themeState.accentColor = activeAccent;
+      saveThemeState();
+
+      // Build tokenChanges for sidebar
+      const tokenChanges = {};
+      const vTokens = getVariantTokens(activeVariant);
+      Object.entries(vTokens).forEach(([k, v]) => {
+        if (k.startsWith('--color-')) tokenChanges[k] = v;
+      });
+      // Accent overrides
+      tokenChanges['--color-primary'] = activeAccent;
+      tokenChanges['--color-primary-hover'] = lightenColor(activeAccent, -15);
+      const lum = themeRelativeLuminance(activeAccent);
+      tokenChanges['--color-on-primary'] = lum > 0.35 ? '#000000' : '#FFFFFF';
+
+      tuneChanges = tuneChanges.filter(c => c.selector !== '#claude-content' || !c._themeColors);
+      tuneChanges.push({
+        selector: '#claude-content',
+        tag: 'div',
+        text: 'Color variant: ' + VARIANT_LABELS[activeVariant] + (activeAccent ? ' / accent ' + activeAccent.toUpperCase() : ''),
+        changes: {},
+        tokenChanges: tokenChanges,
+        timestamp: Date.now(),
+        _themeColors: true
+      });
+
+      saveAnnotations();
+      renderSidebar();
+      showToast('Colors saved.');
+    });
+
+    saveBar.appendChild(saveBtn);
+    wrap.appendChild(saveBar);
+
+    colorsPanel.innerHTML = '';
+    colorsPanel.appendChild(wrap);
+  }
+
+  function rebuildFineTuneTab(panel) {
+    const ftPanel = panel._tabPanels['Fine-tune'];
+    if (!ftPanel) return;
+
+    const td = window.THEME_DATA;
+    if (!td || !td.palettes) return;
+    if (!themeState.system) {
+      ftPanel.innerHTML = '<div style="padding:16px;color:var(--dc-text-secondary,#888);font-size:13px;">Save a design system first to unlock fine-tuning.</div>';
+      return;
+    }
+
+    const palette = td.palettes.find(p => p.key === themeState.system);
+    if (!palette) return;
+
+    const cc = document.getElementById('claude-content');
+    const ft = themeState.fineTune || {};
+
+    // Working state
+    let activeFont = ft.fontFamily || 'system';
+    let spacingMult = ft.spacingMultiplier !== undefined ? ft.spacingMultiplier : 1;
+    let radiusMult = ft.radiusMultiplier !== undefined ? ft.radiusMultiplier : 1;
+
+    const FONT_LABELS = { system: 'System UI', inter: 'Inter', serif: 'Serif', mono: 'Mono' };
+    const SPACE_TOKENS = ['--space-xs', '--space-sm', '--space-md', '--space-lg', '--space-xl'];
+    const RADIUS_TOKENS = ['--radius-sm', '--radius-md', '--radius-lg'];
+
+    function parseRem(val) {
+      if (!val) return 0;
+      const s = val.trim();
+      if (s.endsWith('rem')) return parseFloat(s);
+      if (s.endsWith('px')) return parseFloat(s) / 16;
+      return parseFloat(s);
+    }
+    function parsePx(val) {
+      if (!val) return 0;
+      const s = val.trim();
+      if (s.endsWith('px')) return parseFloat(s);
+      if (s.endsWith('rem')) return parseFloat(s) * 16;
+      return parseFloat(s);
+    }
+
+    function applyFont(key) {
+      if (!cc || !td.fontFamilies) return;
+      const val = td.fontFamilies[key];
+      if (val) cc.style.setProperty('--font-family', val);
+    }
+
+    function applySpacing(mult) {
+      if (!cc || !palette.tokens) return;
+      SPACE_TOKENS.forEach(tok => {
+        const base = palette.tokens[tok];
+        if (base) {
+          const remVal = parseRem(base);
+          cc.style.setProperty(tok, (remVal * mult).toFixed(4) + 'rem');
+        }
+      });
+    }
+
+    function applyRadius(mult) {
+      if (!cc || !palette.tokens) return;
+      RADIUS_TOKENS.forEach(tok => {
+        const base = palette.tokens[tok];
+        if (base) {
+          const pxVal = parsePx(base);
+          cc.style.setProperty(tok, (pxVal * mult).toFixed(1) + 'px');
+        }
+      });
+      // --radius-full always stays 9999px
+      cc.style.setProperty('--radius-full', '9999px');
+    }
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'padding:12px 16px;';
+
+    // ── Font Family ──
+    const fontSection = document.createElement('div');
+    fontSection.className = 'theme-finetune-section';
+
+    const fontLabel = document.createElement('div');
+    fontLabel.className = 'theme-finetune-label';
+    fontLabel.textContent = 'FONT FAMILY';
+    fontSection.appendChild(fontLabel);
+
+    const chips = document.createElement('div');
+    chips.className = 'theme-font-chips';
+
+    Object.entries(FONT_LABELS).forEach(([key, label]) => {
+      const chip = document.createElement('button');
+      chip.className = 'theme-font-chip' + (activeFont === key ? ' active' : '');
+      chip.textContent = label;
+      chip.addEventListener('click', () => {
+        activeFont = key;
+        chips.querySelectorAll('.theme-font-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        applyFont(key);
+      });
+      chips.appendChild(chip);
+    });
+
+    fontSection.appendChild(chips);
+    wrap.appendChild(fontSection);
+
+    // ── Spacing Density ──
+    const spacingSection = document.createElement('div');
+    spacingSection.className = 'theme-finetune-section';
+
+    const spacingLabel = document.createElement('div');
+    spacingLabel.className = 'theme-finetune-label';
+    spacingLabel.textContent = 'SPACING DENSITY';
+    spacingSection.appendChild(spacingLabel);
+
+    const spacingRow = document.createElement('div');
+    spacingRow.className = 'theme-slider-row';
+
+    const spacingSliderLabel = document.createElement('div');
+    spacingSliderLabel.className = 'theme-slider-label';
+    spacingSliderLabel.textContent = 'Density';
+
+    const spacingSlider = document.createElement('input');
+    spacingSlider.type = 'range';
+    spacingSlider.className = 'theme-slider';
+    spacingSlider.min = '0.6';
+    spacingSlider.max = '1.5';
+    spacingSlider.step = '0.05';
+    spacingSlider.value = String(spacingMult);
+
+    const spacingValue = document.createElement('div');
+    spacingValue.className = 'theme-slider-value';
+    spacingValue.textContent = parseFloat(spacingMult).toFixed(2) + 'x';
+
+    spacingSlider.addEventListener('input', () => {
+      spacingMult = parseFloat(spacingSlider.value);
+      spacingValue.textContent = spacingMult.toFixed(2) + 'x';
+      applySpacing(spacingMult);
+    });
+
+    spacingRow.appendChild(spacingSliderLabel);
+    spacingRow.appendChild(spacingSlider);
+    spacingRow.appendChild(spacingValue);
+    spacingSection.appendChild(spacingRow);
+    wrap.appendChild(spacingSection);
+
+    // ── Border Radius ──
+    const radiusSection = document.createElement('div');
+    radiusSection.className = 'theme-finetune-section';
+
+    const radiusLabel = document.createElement('div');
+    radiusLabel.className = 'theme-finetune-label';
+    radiusLabel.textContent = 'BORDER RADIUS';
+    radiusSection.appendChild(radiusLabel);
+
+    const radiusRow = document.createElement('div');
+    radiusRow.className = 'theme-slider-row';
+
+    const radiusSliderLabel = document.createElement('div');
+    radiusSliderLabel.className = 'theme-slider-label';
+    radiusSliderLabel.textContent = 'Radius';
+
+    const radiusSlider = document.createElement('input');
+    radiusSlider.type = 'range';
+    radiusSlider.className = 'theme-slider';
+    radiusSlider.min = '0';
+    radiusSlider.max = '2';
+    radiusSlider.step = '0.1';
+    radiusSlider.value = String(radiusMult);
+
+    const radiusValue = document.createElement('div');
+    radiusValue.className = 'theme-slider-value';
+    radiusValue.textContent = parseFloat(radiusMult).toFixed(1) + 'x';
+
+    radiusSlider.addEventListener('input', () => {
+      radiusMult = parseFloat(radiusSlider.value);
+      radiusValue.textContent = radiusMult.toFixed(1) + 'x';
+      applyRadius(radiusMult);
+    });
+
+    radiusRow.appendChild(radiusSliderLabel);
+    radiusRow.appendChild(radiusSlider);
+    radiusRow.appendChild(radiusValue);
+    radiusSection.appendChild(radiusRow);
+    wrap.appendChild(radiusSection);
+
+    // ── Save Bar ──
+    const saveBar = document.createElement('div');
+    saveBar.className = 'theme-save-bar';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'theme-save-btn';
+    saveBtn.textContent = 'Save Fine-tune';
+
+    saveBtn.addEventListener('click', () => {
+      themeState.fineTune = {
+        fontFamily: activeFont,
+        spacingMultiplier: spacingMult,
+        radiusMultiplier: radiusMult
+      };
+      saveThemeState();
+
+      // Build tokenChanges for sidebar
+      const tokenChanges = {};
+      if (td.fontFamilies && td.fontFamilies[activeFont]) {
+        tokenChanges['--font-family'] = td.fontFamilies[activeFont];
+      }
+      if (palette.tokens) {
+        SPACE_TOKENS.forEach(tok => {
+          const base = palette.tokens[tok];
+          if (base) {
+            const remVal = parseRem(base);
+            tokenChanges[tok] = (remVal * spacingMult).toFixed(4) + 'rem';
+          }
+        });
+        RADIUS_TOKENS.forEach(tok => {
+          const base = palette.tokens[tok];
+          if (base) {
+            const pxVal = parsePx(base);
+            tokenChanges[tok] = (pxVal * radiusMult).toFixed(1) + 'px';
+          }
+        });
+        tokenChanges['--radius-full'] = '9999px';
+      }
+
+      tuneChanges = tuneChanges.filter(c => c.selector !== '#claude-content' || !c._themeFineTune);
+      tuneChanges.push({
+        selector: '#claude-content',
+        tag: 'div',
+        text: 'Fine-tune: ' + FONT_LABELS[activeFont] + ' / spacing ' + spacingMult.toFixed(2) + 'x / radius ' + radiusMult.toFixed(1) + 'x',
+        changes: {},
+        tokenChanges: tokenChanges,
+        timestamp: Date.now(),
+        _themeFineTune: true
+      });
+
+      saveAnnotations();
+      renderSidebar();
+      showToast('Fine-tune settings saved.');
+    });
+
+    saveBar.appendChild(saveBtn);
+    wrap.appendChild(saveBar);
+
+    ftPanel.innerHTML = '';
+    ftPanel.appendChild(wrap);
+  }
+
   // Add toolbar and header buttons on load
   document.addEventListener('DOMContentLoaded', () => {
     const toolbar = document.getElementById('toolbar-group');
@@ -1349,7 +2109,18 @@
       // Design tools
       const designTools = [
         { id: 'inspect-toggle', title: 'Inspect (Shift+I)', icon: '<path d="M13.5 2.5l-1-1-2 2-1-1-5 5 2 2 5-5-1-1z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" fill="none"/><path d="M4.5 9.5l-2 4 4-2" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" fill="none"/>', action: () => { if (commentMode) setCommentMode(false); if (tuneMode) setTuneMode(false); setInspectMode(!inspectMode); } },
-        { id: 'tune-toggle', title: 'Tune (Shift+T)', icon: '<line x1="3" y1="4" x2="13" y2="4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><circle cx="9" cy="4" r="1.5" fill="currentColor"/><line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><circle cx="5" cy="8" r="1.5" fill="currentColor"/><line x1="3" y1="12" x2="13" y2="12" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><circle cx="10" cy="12" r="1.5" fill="currentColor"/>', action: () => { if (commentMode) setCommentMode(false); if (inspectMode) setInspectMode(false); setTuneMode(!tuneMode); } }
+        { id: 'tune-toggle', title: 'Tune (Shift+T)', icon: '<line x1="3" y1="4" x2="13" y2="4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><circle cx="9" cy="4" r="1.5" fill="currentColor"/><line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><circle cx="5" cy="8" r="1.5" fill="currentColor"/><line x1="3" y1="12" x2="13" y2="12" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><circle cx="10" cy="12" r="1.5" fill="currentColor"/>', action: () => { if (commentMode) setCommentMode(false); if (inspectMode) setInspectMode(false); setTuneMode(!tuneMode); } },
+        {
+          id: 'theme-toggle',
+          title: 'Theme (Shift+D)',
+          icon: '<circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.25" fill="none"/><path d="M8 2.5a5.5 5.5 0 0 0 0 11V2.5z" fill="currentColor"/>',
+          action: () => {
+            if (commentMode) setCommentMode(false);
+            if (inspectMode) setInspectMode(false);
+            if (tuneMode) setTuneMode(false);
+            setThemeMode(!themeMode);
+          }
+        }
       ];
 
       designTools.forEach(t => {
@@ -1411,6 +2182,7 @@
 
     updateBadge();
     renderSidebar();
+    applyStoredTheme();
 
     // Start with pins hidden
     document.body.classList.add('annotation-pins-hidden');
