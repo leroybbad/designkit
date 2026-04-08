@@ -1,0 +1,22 @@
+{
+  "name": "designkit",
+  "description": "Browser-based design refinement tools for Claude Code — Comment, Inspect, Tune, and Shadow modes for hands-on UI iteration",
+  "version": "0.1.0",
+  "author": {
+    "name": "Lee McEwen"
+  },
+  "homepage": "https://github.com/leroybbad/designkit",
+  "repository": "https://github.com/leroybbad/designkit",
+  "license": "MIT",
+  "keywords": [
+    "design",
+    "ui",
+    "prototyping",
+    "design-tools",
+    "inspect",
+    "tune",
+    "shadows",
+    "design-tokens",
+    "annotation"
+  ]
+}
