@@ -1,6 +1,8 @@
-# Design Companion
+# Designkit 
 
-A browser-based design refinement plugin for Claude Code. Gives designers hands-on tools to annotate, inspect, and tune prototypes — bridging the gap between "Claude rendered something" and "this is actually good."
+This plugin was built to help step designers (and non-designers) through a hands-on method of designing with claude code.  With the right amount of specificity, you can move through divergent exercises into concepts, and finally into building out a prototype.
+
+Ultimately, we want to get things into our user's hands as fast as possible.  Design, prototype, test, iterate.  We've essentially condensed a lot of the "Design" aspect directly into prototyping, allowing you to move immediately into learning from users.
 
 ## What It Does
 
@@ -59,9 +61,7 @@ That's it. The skill, server, and all tools ship with the plugin — nothing to 
 
 ## Philosophy
 
-AI-generated design is 80% right and 100% slop. The last 20% — the spacing, the weight, the shadow depth, the animation timing — is what separates craft from generic output. This tool keeps the designer's hands on the wheel during that critical refinement phase.
-
-Read more in [docs/VISION.md](docs/VISION.md).
+AI-generated design is 50% right and 50% slop. When finally narrowing down on a concept, the last 10% — the spacing, the weight, the shadow depth, the animation timing — is what separates craft from generic output. This tool keeps the designer's hands on the wheel during ideation and concept refinement.
 
 ## License
 
