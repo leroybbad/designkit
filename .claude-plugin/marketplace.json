@@ -9,10 +9,7 @@
       "name": "designkit",
       "description": "Comment, Inspect, Tune, and Shadow tools for hands-on UI design iteration with Claude",
       "version": "0.1.0",
-      "source": {
-        "source": "url",
-        "url": "https://github.com/leroybbad/designkit.git"
-      },
+      "source": "./",
       "author": {
         "name": "Lee McEwen"
       }
