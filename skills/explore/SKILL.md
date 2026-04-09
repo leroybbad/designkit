@@ -30,7 +30,7 @@ Do NOT generate a final prototype, write production HTML, or invoke the designki
 2. An interaction model is identified (pattern, navigation, density)
 3. A concept direction is chosen (from Crazy 8s → deep dive → convergence)
 
-You MAY show visual content in the browser during exploration (concept thumbnails,
+You MAY show visual content in the browser during exploration (concept concepts,
 deep dive wireframes). These are exploration artifacts, not prototypes.
 </HARD-GATE>
 
@@ -40,11 +40,11 @@ You MUST create a task for each item and complete them in order:
 
 1. **Read the room** — assess what's known, scan codebase for existing tokens
 2. **Discover** — adaptive questions (problem, interaction model)
-3. **Crazy 8s** — generate 6-8 abstract structural thumbnails in a grid
+3. **High-level concepts** — generate 6-8 abstract structural concepts in a grid
 4. **Deep dive** — render selected concepts at full detail
 5. **Converge** — user picks a direction
 6. **Generate first prototype** at full fidelity with Tailwind/Shadcn as default
-7. **Hand off** — tell user to use Theme Selector (Shift+D) to swap design systems, colors, and fine-tune. Also offer refinement via designkit or implementation path
+7. **Hand off** — tell user to use Theme Selector (Ctrl+D) to swap design systems, colors, and fine-tune. Also offer refinement via designkit or implementation path
 
 ## Phase 1: Read the Room
 
@@ -124,25 +124,25 @@ Ask only what you don't already know:
 **Do NOT ask about look & feel or palettes during discovery.** Concepts should
 be design-system-agnostic — neutral, clean styling so the user evaluates structure
 and layout without being distracted by color or personality. The user swaps design
-systems live in the viewer after the prototype is generated (Shift+D).
+systems live in the viewer after the prototype is generated (Ctrl+D).
 
-## Phase 3: Schematic Thumbnails (Diverge)
+## Phase 3: High-Level Concepts (Diverge)
 
 Once you have enough context (problem + interaction model):
 
-1. Read `references/wireframe-guide.md` — specifically **Level 1: Schematic Thumbnails**
-2. **Before generating anything:** assign semantic meaning to 2-3 colors (e.g. purple =
-   AI/active, teal = success, blue = contextual). Hold this constant across ALL thumbnails.
-3. Generate **6-8 abstract structural thumbnails** in a grid layout
-4. Each thumbnail:
+1. Read `references/wireframe-guide.md` — specifically **Level 1: Schematic Concepts**
+2. Internally assign semantic meaning to 2-3 colors and hold constant across all concepts.
+   Do NOT explain the color system to the user — just build the concepts.
+3. Generate **6-8 abstract structural concepts** in a grid layout
+4. Each concept:
    - Numbered (01-08) with a short bold title
    - Uses only **rectangles, lines, and circles** — NO real text, NO real icons
    - The arrangement of primitives IS the concept, not a representation of it
    - One-line description below
    - Represents a **fundamentally different structural pattern**
    - Clickable via `data-choice` attributes
-5. All thumbnails must fit in one view without scrolling
-6. Tell the user: "8 structural patterns — click any to pressure-test"
+5. All concepts must fit in one view without scrolling
+6. **Always give the user the URL.** Tell them: "8 high-level concepts ready at [URL]. Click any to explore further."
 7. Wait for selection (1-3 picks)
 
 **If the user asks to "push wider":** Generate another batch exploring more
@@ -150,7 +150,7 @@ unconventional patterns. Maintain the same color system.
 
 ## Phase 3b: Structural Prototype (Pressure-Test)
 
-After the user selects 1-3 thumbnails:
+After the user selects 1-3 concepts:
 
 1. Read `references/wireframe-guide.md` — specifically **Level 2: Structural Prototype**
 2. Render selected concepts **stacked vertically** (never in a grid)
@@ -160,12 +160,12 @@ After the user selects 1-3 thumbnails:
    - Use **abbreviated content** (representative names, short descriptions, plausible counts)
    - Build only the interactions that **test the core pattern assumption**
    - Include at least one **stress-test** that forces the pattern into a harder state
-   - Use the same semantic color system from the thumbnails
+   - Use the same semantic color system from the concepts
    - Be clickable via `data-choice` attributes
 4. **End with a structural verdict** for each concept — rendered as text below the
    prototype, not inside it: what the pattern gets right, where it strains, what it
    implies for next steps
-5. Tell the user: "Scroll through and click your favorite. You can also use Comment (Shift+C) to tag specific elements you like from ANY concept — even ones you don't pick overall. When you Send, I'll combine your pick with your annotations to build the best version."
+5. Tell the user: "Scroll through and click your favorite. You can also use Comment (Ctrl+C) to tag specific elements you like from ANY concept — even ones you don't pick overall. When you Send, I'll combine your pick with your annotations to build the best version."
 
 ## Phase 4: Converge
 
@@ -195,7 +195,7 @@ After the user selects 1-3 thumbnails:
 
 1. Take the chosen concept and render it at full fidelity
 2. Use **Tailwind/Shadcn tokens as the default** — the user will swap design systems
-   live in the viewer using the Theme Selector (Shift+D)
+   live in the viewer using the Theme Selector (Ctrl+D)
 3. If codebase tokens were detected in Phase 1, use those instead of Tailwind
 4. Use real content, proper spacing, complete structure
 5. Follow the designkit SKILL.md authoring standards (CSS classes, tokens, semantic names, Lucide icons, anti-slop rules)
@@ -208,8 +208,8 @@ After the brief is written and prototype is shown:
 > "Design brief saved to `docs/designkit/briefs/<filename>.md`. The first prototype
 > is in the browser. From here you can:
 >
-> - **Theme** (Shift+D) — swap design systems, color palettes, and fine-tune typography/spacing/radius
-> - **Refine** — use Comment (Shift+C) and Tune (Shift+T) for per-element adjustments
+> - **Theme** (Ctrl+D) — swap design systems, color palettes, and fine-tune typography/spacing/radius
+> - **Refine** — use Comment (Ctrl+C) and Tune (Ctrl+T) for per-element adjustments
 > - **Implement** — use the brief as input for a coding plan
 > - **Keep exploring** — if this direction doesn't feel right, we can go back"
 
@@ -244,7 +244,7 @@ for their feedback (clicks, comments, tune changes) as JSONL.
 - **Multiple choice preferred.** Easier to answer than open-ended.
 - **Never re-ask.** Skip questions the user already answered.
 - **Structure before style.** Explore layout patterns with neutral styling. Users swap design systems live in the viewer after the prototype is generated.
-- **Semantic color, not decorative.** Assign 2-3 colors structural meaning before generating thumbnails. Hold constant across the session.
+- **Semantic color, not decorative.** Assign 2-3 colors structural meaning before generating concepts. Hold constant across the session.
 - **Two fidelity levels, never averaged.** Level 1 = abstract primitives for divergence. Level 2 = structural prototypes for pressure-testing. Don't mix them.
 - **Stress-test every pattern.** Level 2 prototypes must include at least one toggle or scenario that forces the pattern into a harder state.
 - **End with verdicts.** Every Level 2 concept gets explicit analysis: what works, where it strains, what's next.
